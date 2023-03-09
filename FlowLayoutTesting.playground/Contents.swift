@@ -22,26 +22,36 @@ final class ColorCell: UICollectionViewCell {
 
 final class SupplementaryCollection: NSObject, UICollectionViewDataSource {
 
+    private let collection: UICollectionView
     private let params: GeometricParams
 
-    private let colors: [UIColor] = [
-        .black, .blue, .brown,
-        .cyan, .green, .orange,
-        .red, .purple, .yellow
-    ]
+    private var colors = [UIColor]()
 
-    let count: Int
-
-    init(count: Int, using params: GeometricParams) {
-        self.count = count
+    init(using params: GeometricParams, collection: UICollectionView) {
         self.params = params
+        self.collection = collection
+        super.init()
+        collection.register(ColorCell.self, forCellWithReuseIdentifier: ColorCell.identifier)
+        collection.dataSource = self
+        collection.delegate = self
+        collection.reloadData()
+    }
+
+    func add(colors values: [UIColor]) {
+        guard !values.isEmpty else { return }
+        let count = colors.count
+        colors += values
+        collection.performBatchUpdates {
+            let indices = (count..<colors.count).map { IndexPath(row: $0, section: 0) }
+            collection.insertItems(at: indices)
+        }
     }
 
     // MARK: - UICollectionViewDataSource
 
     func collectionView(_ collectionView: UICollectionView,
                         numberOfItemsInSection section: Int) -> Int {
-        count
+        colors.count
     }
 
     func collectionView(_ collectionView: UICollectionView,
@@ -51,7 +61,7 @@ final class SupplementaryCollection: NSObject, UICollectionViewDataSource {
             return UICollectionViewCell()
         }
         cell.prepareForReuse()
-        cell.contentView.backgroundColor = colors[Int.random(in: 0..<colors.count)]
+        cell.contentView.backgroundColor = colors[indexPath.row]
         return cell
     }
 }
@@ -63,13 +73,7 @@ extension SupplementaryCollection: UICollectionViewDelegateFlowLayout {
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
         let availableWidth = collectionView.frame.width - params.paddingWidth
         let cellWidth = availableWidth / CGFloat(params.cellsPerRow)
-        let height: CGFloat
-        if indexPath.row % 6 < 2 {
-            height = 2 / 3
-        } else {
-            height = 1 / 3
-        }
-        return CGSize(width: cellWidth, height: cellWidth * height)
+        return CGSize(width: cellWidth, height: cellWidth * 2 / 3)
     }
 
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, insetForSectionAt section: Int) -> UIEdgeInsets {
@@ -84,6 +88,25 @@ extension SupplementaryCollection: UICollectionViewDelegateFlowLayout {
     // отвечает за горизонтальные отступы между ячейками
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, minimumInteritemSpacingForSectionAt section: Int) -> CGFloat {
         params.cellSpacing
+    }
+
+    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        let selectedColor = colors[indexPath.row]
+        var deletedItemsIndicies = [Int]()
+        colors.enumerated().forEach { index, value in
+            if value == selectedColor {
+                deletedItemsIndicies.append(index)
+            }
+        }
+        deletedItemsIndicies.reversed().forEach {
+            colors.remove(at: $0)
+        }
+        collectionView.performBatchUpdates {
+            let deletedIndexPaths = deletedItemsIndicies.map {
+                IndexPath(row: $0, section: 0)
+            }
+            collectionView.deleteItems(at: deletedIndexPaths)
+        }
     }
 }
 
@@ -104,20 +127,45 @@ struct GeometricParams {
     }
 }
 
-let size = CGRect(origin: .zero, size: CGSize(width: 400, height: 600))
-let params = GeometricParams(cellsPerRow: 2,
+let size = CGRect(origin: .zero, size: CGSize(width: 400, height: 400))
+let view = UIView(frame: size)
+let params = GeometricParams(cellsPerRow: 3,
                              leftInset: 10,
                              rightInset: 10,
                              cellSpacing: 10)
 let layout = UICollectionViewFlowLayout()
-// Изменим направление скроллинга с вертикального (по умолчанию) на горизонтальное
-layout.scrollDirection = .horizontal
-let helper = SupplementaryCollection(count: 31, using: params)
-let collection = UICollectionView(frame: size, collectionViewLayout: layout)
-collection.register(ColorCell.self, forCellWithReuseIdentifier: ColorCell.identifier)
-collection.backgroundColor = .lightGray
-collection.dataSource = helper
-collection.delegate = helper
+let collection = UICollectionView(frame: .zero, collectionViewLayout: layout)
+collection.translatesAutoresizingMaskIntoConstraints = false
+collection.backgroundColor = .white
+view.addSubview(collection)
 
-PlaygroundPage.current.liveView = collection
-collection.reloadData()
+PlaygroundPage.current.liveView = view
+
+let helper = SupplementaryCollection(using: params, collection: collection)
+let addButton = UIButton(type: .roundedRect, primaryAction: UIAction(title: "Add color", handler: { [weak helper] _ in
+    // Массив доступных цветов
+    let colors: [UIColor] = [
+        .black, .blue, .brown,
+        .cyan, .green, .orange,
+        .red, .purple, .yellow
+    ]
+    // Произвольно выберем два цвета из массива
+    let selectedColors = (0..<2).map { _ in
+        colors[Int.random(in: 0..<colors.count)]
+    }
+    // Добавим выбранные цвета в коллекцию
+    helper?.add(colors: selectedColors)
+}))
+addButton.translatesAutoresizingMaskIntoConstraints = false
+view.addSubview(addButton)
+
+NSLayoutConstraint.activate([
+    collection.topAnchor.constraint(equalTo: view.topAnchor),
+    collection.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+    collection.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+    collection.heightAnchor.constraint(equalTo: view.heightAnchor, multiplier: 0.8),
+    addButton.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+    addButton.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+    addButton.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+    addButton.heightAnchor.constraint(equalToConstant: 30)
+])
